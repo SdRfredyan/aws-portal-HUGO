@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AWS Portal — S3 & EC2 (MVP UI clair)</title>
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root{
+      --accent:#0d6efd; /* bleu bootstrap */
+    }
+    body{background:#f7f9fc;color:#1f2937}
+    .app-shell{min-height:100vh;display:grid;grid-template-columns:280px 1fr}
+    .sidebar{background:#ffffff;border-right:1px solid #e5e7eb}
+    .brand{font-weight:800}
+    .nav-link{color:#374151;border-radius:.5rem}
+    .nav-link.active{background:#e7f1ff;color:#0d6efd;font-weight:600}
+    .nav-link:hover{background:#f3f4f6}
+    .content{padding:24px}
+    .page-title{margin-bottom:.25rem}
+    .sub{color:#6b7280}
+
+    .card-aws{background:#fff;border:1px solid #e5e7eb;border-radius:.75rem}
+    .stat-num{font-size:2rem;font-weight:800;color:#0d6efd}
+
+    .toolbar{background:#fff;border:1px solid #e5e7eb;border-radius:.75rem;padding:12px}
+    .table thead th{position:sticky;top:0;background:#fff;border-bottom:2px solid #e5e7eb}
+    .table>tbody>tr{vertical-align:middle}
+
+    .btn-accent{background:var(--accent);border-color:var(--accent)}
+    .btn-outline-soft{border:1px solid #e5e7eb;background:#fff}
+
+    .form-select, .form-control{background:#fff}
+
+    .modal-content{border:1px solid #e5e7eb}
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <!-- Sidebar -->
+  <aside class="sidebar p-3">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <div class="rounded-3 px-2 py-1 bg-primary text-white fw-bold">AWS</div>
+      <div class="brand">Portal</div>
+    </div>
+    <nav class="nav flex-column gap-1">
+      <a class="nav-link active" href="#" data-view="dashboard"><i class="bi bi-grid"></i> Tableau de bord</a>
+      <a class="nav-link" href="#" data-view="s3"><i class="bi bi-bucket"></i> S3 Buckets</a>
+      <a class="nav-link" href="#" data-view="ec2"><i class="bi bi-hdd-network"></i> EC2 Instances</a>
+      <hr/>
+      <a class="nav-link" href="#" data-view="about"><i class="bi bi-info-circle"></i> À propos</a>
+    </nav>
+  </aside>
+
+  <!-- Main content -->
+  <main class="content">
+    <!-- Top bar -->
+    <div class="d-flex align-items-baseline justify-content-between mb-3">
+      <div>
+        <h3 class="page-title">Console de gestion</h3>
+        <div class="sub small">Région : <span id="regionLabel">eu-west-3</span> • Compte : <span id="accountLabel">—</span></div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <label class="sub small me-1">Région</label>
+        <select id="regionSelect" class="form-select form-select-sm" style="width: 200px;">
+          <option value="eu-west-3" selected>eu-west-3 (Paris)</option>
+          <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+          <option value="us-east-1">us-east-1 (N. Virginia)</option>
+          <option value="us-west-2">us-west-2 (Oregon)</option>
+        </select>
+        <button class="btn btn-outline-soft btn-sm" id="refreshBtn"><i class="bi bi-arrow-repeat"></i> Actualiser</button>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="view-dashboard" class="view">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="card-aws p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <div class="sub text-uppercase small">S3 Buckets</div>
+                <div id="statBuckets" class="stat-num">—</div>
+              </div>
+              <i class="bi bi-bucket fs-1 text-primary"></i>
+            </div>
+            <div class="mt-3 d-flex gap-2">
+              <a class="btn btn-primary btn-sm" data-view-link="s3"><i class="bi bi-eye"></i> Voir</a>
+              <button class="btn btn-outline-soft btn-sm" data-bs-toggle="modal" data-bs-target="#modalCreateBucket"><i class="bi bi-plus-lg"></i> Créer un bucket</button>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card-aws p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <div class="sub text-uppercase small">EC2 en cours d’exécution</div>
+                <div id="statInstances" class="stat-num">—</div>
+              </div>
+              <i class="bi bi-hdd-network fs-1 text-primary"></i>
+            </div>
+            <div class="mt-3 d-flex gap-2">
+              <a class="btn btn-primary btn-sm" data-view-link="ec2"><i class="bi bi-eye"></i> Voir</a>
+              <button class="btn btn-outline-soft btn-sm" data-bs-toggle="modal" data-bs-target="#modalLaunchInstance"><i class="bi bi-rocket-takeoff"></i> Lancer une instance</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- S3 View (MVP: lister + créer) -->
+    <div id="view-s3" class="view d-none">
+      <div class="toolbar mb-3 d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCreateBucket"><i class="bi bi-plus"></i> Créer un bucket</button>
+          <button class="btn btn-outline-soft btn-sm" id="refreshBuckets"><i class="bi bi-arrow-repeat"></i> Recharger</button>
+        </div>
+        <div class="ms-auto" style="max-width:320px">
+          <input id="bucketFilter" class="form-control form-control-sm" placeholder="Filtrer par nom…" />
+        </div>
+      </div>
+
+      <div class="card-aws p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" id="tableBuckets">
+            <thead class="small">
+              <tr>
+                <th>Nom</th>
+                <th>Région</th>
+                <th>Créé le</th>
+                <th>Versioning</th>
+              </tr>
+            </thead>
+            <tbody><!-- rows injected --></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="sub small mt-2 mb-0">Actions futures (non affichées pour le MVP): contenu, upload, suppression.</p>
+    </div>
+
+    <!-- EC2 View (MVP: lister + lancer) -->
+    <div id="view-ec2" class="view d-none">
+      <div class="toolbar mb-3 d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalLaunchInstance"><i class="bi bi-rocket-takeoff"></i> Lancer une instance</button>
+          <button class="btn btn-outline-soft btn-sm" id="refreshInstances"><i class="bi bi-arrow-repeat"></i> Recharger</button>
+        </div>
+        <div class="d-flex gap-2">
+          <select id="stateFilter" class="form-select form-select-sm" style="width:200px">
+            <option value="">Tous les états</option>
+            <option value="running">Running</option>
+            <option value="stopped">Stopped</option>
+          </select>
+          <input id="nameFilter" class="form-control form-control-sm" placeholder="Filtrer par nom (tag Name)…" style="width:260px;" />
+        </div>
+      </div>
+
+      <div class="card-aws p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" id="tableInstances">
+            <thead class="small">
+              <tr>
+                <th>Instance ID</th>
+                <th>Name</th>
+                <th>State</th>
+                <th>Type</th>
+                <th>AZ</th>
+                <th>IP Publique</th>
+                <th>Lancée le</th>
+              </tr>
+            </thead>
+            <tbody><!-- rows injected --></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- About View -->
+    <div id="view-about" class="view d-none">
+      <div class="card-aws p-4">
+        <h5 class="mb-2">À propos</h5>
+        <p class="mb-0 sub">MVP : liste S3/EC2, création bucket, lancement instance. Les autres actions seront ajoutées ensuite.</p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modals (MVP) -->
+<div class="modal fade" id="modalCreateBucket" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-bucket me-2"></i>Créer un bucket</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Nom du bucket</label>
+          <input id="bucketName" class="form-control" placeholder="ex: projet-2025-demo" />
+          <div class="form-text">Entre 3 et 63 caractères, minuscules, chiffres et tirets.</div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Région</label>
+          <select id="bucketRegion" class="form-select">
+            <option value="eu-west-3" selected>eu-west-3 (Paris)</option>
+            <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+            <option value="us-east-1">us-east-1 (N. Virginia)</option>
+            <option value="us-west-2">us-west-2 (Oregon)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button class="btn btn-primary" id="btnCreateBucket">
+          <span class="spinner-border spinner-border-sm me-2 d-none" id="spinnerCreateBucket" role="status"></span>
+          Créer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalLaunchInstance" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-rocket-takeoff me-2"></i>Lancer une instance</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">AMI (par défaut région)</label>
+            <input id="amiId" class="form-control" placeholder="ex: ami-0abcdef123..." />
+          </div>
+          <div class="col-6">
+            <label class="form-label">Type</label>
+            <input id="instanceType" class="form-control" value="t3.micro" />
+          </div>
+          <div class="col-6">
+            <label class="form-label">Key Pair</label>
+            <input id="keyName" class="form-control" placeholder="ex: my-keypair" />
+          </div>
+          <div class="col-12">
+            <label class="form-label">Security Groups (IDs, séparés par virgule)</label>
+            <input id="sgIds" class="form-control" placeholder="ex: sg-123, sg-456" />
+            <div class="form-text">Le SG doit autoriser SSH(22) et HTTP(80) pour le TP.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button class="btn btn-primary" id="btnLaunchInstance">
+          <span class="spinner-border spinner-border-sm me-2 d-none" id="spinnerLaunch" role="status"></span>
+          Lancer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div class="position-fixed top-0 end-0 p-3" style="z-index: 1080">
+  <div id="toast" class="toast text-bg-dark border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body" id="toastText">—</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+<script>
+  // === UI helpers ===
+  const views = { dashboard:byId('view-dashboard'), s3:byId('view-s3'), ec2:byId('view-ec2'), about:byId('view-about') };
+  const regionSelect = byId('regionSelect');
+  const regionLabel  = byId('regionLabel');
+  const accountLabel = byId('accountLabel');
+  const toastEl = byId('toast');
+  const toastBody = byId('toastText');
+  const toast = new bootstrap.Toast(toastEl, { delay: 2200 });
+  function byId(id){return document.getElementById(id)}
+  function showToast(msg){ toastBody.textContent = msg; toast.show(); }
+  function switchView(name){ Object.values(views).forEach(v=>v.classList.add('d-none')); views[name].classList.remove('d-none'); document.querySelectorAll('.sidebar .nav-link').forEach(a=>a.classList.toggle('active', a.dataset.view===name)); }
+  document.querySelectorAll('[data-view]').forEach(a=>a.addEventListener('click', e=>{e.preventDefault(); switchView(a.dataset.view);}));
+  document.querySelectorAll('[data-view-link]').forEach(a=>a.addEventListener('click', e=>{e.preventDefault(); switchView(a.dataset.viewLink);}));
+
+  regionSelect.addEventListener('change',()=>{ regionLabel.textContent = regionSelect.value; showToast('Région : '+regionSelect.value); refreshAll(); });
+
+  // === Data placeholders (remplacés par l'API plus tard) ===
+  async function loadMeta(){ accountLabel.textContent = '123456789012'; }
+
+  // S3
+  const tableBucketsBody = document.querySelector('#tableBuckets tbody');
+  const bucketFilter = byId('bucketFilter');
+  async function loadBuckets(){
+    tableBucketsBody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary">Chargement…</td></tr>';
+    const data = [
+      {name:'tp-aws-s3-hugo', region:'eu-west-3', creationDate:'2025-10-02T08:30:00Z', versioning:'Suspended'},
+      {name:'lab-demo-portal', region:'eu-west-3', creationDate:'2025-09-20T10:00:00Z', versioning:'Disabled'}
+    ];
+    renderBuckets(data);
+  }
+  function renderBuckets(rows){
+    const filter = (bucketFilter.value||'').toLowerCase();
+    const html = rows
+      .filter(r=>r.name.toLowerCase().includes(filter))
+      .map(r=>`<tr>
+          <td>${r.name}</td>
+          <td>${r.region}</td>
+          <td>${new Date(r.creationDate).toLocaleString()}</td>
+          <td>${r.versioning||'—'}</td>
+        </tr>`).join('');
+    tableBucketsBody.innerHTML = html || '<tr><td colspan="4" class="text-center text-secondary">Aucun bucket</td></tr>';
+  }
+  byId('refreshBuckets').addEventListener('click', loadBuckets);
+  bucketFilter.addEventListener('input', loadBuckets);
+
+  // Create bucket (UI only)
+  const spinnerCreateBucket = byId('spinnerCreateBucket');
+  byId('btnCreateBucket').addEventListener('click', async ()=>{
+    const name = byId('bucketName').value.trim();
+    const region = byId('bucketRegion').value;
+    if(!name){ showToast('Nom de bucket requis'); return; }
+    spinnerCreateBucket.classList.remove('d-none');
+    try{
+      // TODO: POST /api/s3/buckets {name, region}
+      showToast('Bucket créé : ' + name);
+      bootstrap.Modal.getInstance(byId('modalCreateBucket')).hide();
+      byId('bucketName').value='';
+      loadBuckets();
+    }catch(e){ showToast('Erreur de création'); }
+    finally{ spinnerCreateBucket.classList.add('d-none'); }
+  });
+
+  // EC2
+  const tableInstancesBody = document.querySelector('#tableInstances tbody');
+  const stateFilter = byId('stateFilter');
+  const nameFilter = byId('nameFilter');
+  async function loadInstances(){
+    tableInstancesBody.innerHTML = '<tr><td colspan="7" class="text-center text-secondary">Chargement…</td></tr>';
+    const data = [
+      {id:'i-0abc', name:'web-1', state:'running', type:'t3.micro', az:'eu-west-3a', publicIp:'52.47.x.x', launchTime:'2025-10-02T07:10:00Z'},
+      {id:'i-0def', name:'batch-1', state:'stopped', type:'t3.micro', az:'eu-west-3b', publicIp:'', launchTime:'2025-09-28T17:40:00Z'}
+    ];
+    renderInstances(data);
+  }
+  function renderInstances(rows){
+    const nameF = (nameFilter.value||'').toLowerCase();
+    const stateF = stateFilter.value;
+    const html = rows
+      .filter(r=>!stateF || r.state===stateF)
+      .filter(r=>!nameF || (r.name||'').toLowerCase().includes(nameF))
+      .map(r=>`<tr>
+          <td><span class="badge text-bg-light">${r.id}</span></td>
+          <td>${r.name||'—'}</td>
+          <td><span class="badge ${r.state==='running'?'text-bg-success':'text-bg-secondary'}">${r.state}</span></td>
+          <td>${r.type}</td>
+          <td>${r.az}</td>
+          <td>${r.publicIp||'—'}</td>
+          <td>${new Date(r.launchTime).toLocaleString()}</td>
+        </tr>`).join('');
+    tableInstancesBody.innerHTML = html || '<tr><td colspan="7" class="text-center text-secondary">Aucune instance</td></tr>';
+  }
+  byId('refreshInstances').addEventListener('click', loadInstances);
+  stateFilter.addEventListener('change', loadInstances);
+  nameFilter.addEventListener('input', loadInstances);
+
+  // Launch instance (UI only)
+  const spinnerLaunch = byId('spinnerLaunch');
+  byId('btnLaunchInstance').addEventListener('click', async ()=>{
+    const ami = byId('amiId').value.trim();
+    const type = byId('instanceType').value.trim();
+    const keyName = byId('keyName').value.trim();
+    const sgIds = byId('sgIds').value.split(',').map(s=>s.trim()).filter(Boolean);
+    if(!ami || !type || !keyName || !sgIds.length){ showToast('Champs requis manquants'); return; }
+    spinnerLaunch.classList.remove('d-none');
+    try{
+      // TODO: POST /api/ec2/instances
+      showToast('Instance en cours de création…');
+      bootstrap.Modal.getInstance(byId('modalLaunchInstance')).hide();
+      loadInstances();
+    }catch(e){ showToast('Erreur de lancement'); }
+    finally{ spinnerLaunch.classList.add('d-none'); }
+  });
+
+  // Refresh all
+  async function refreshAll(){ await Promise.all([loadMeta(), loadBuckets(), loadInstances()]); updateStats(); }
+  function updateStats(){
+    const bCount = document.querySelectorAll('#tableBuckets tbody tr').length;
+    const running = Array.from(document.querySelectorAll('#tableInstances tbody tr')).filter(tr=>tr.querySelector('.text-bg-success')).length;
+    byId('statBuckets').textContent = (bCount && document.querySelector('#tableBuckets tbody tr td')?.textContent!=='Chargement…') ? bCount : '—';
+    byId('statInstances').textContent = running || '0';
+  }
+
+  // Boot
+  refreshAll();
+</script>
+</body>
+</html>
